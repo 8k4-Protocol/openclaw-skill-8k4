@@ -197,12 +197,22 @@ Read [references/SAFETY.md]({baseDir}/references/SAFETY.md) for the full policy.
 | `metadata` write | Explicit user approval |
 | `keys/generate` | Only on explicit request |
 
-## Authentication Modes
+## Access & Authentication
 
-1. **No auth** — `/health`, `/stats/public`, `/agents/top` (limit ≤ 25)
-2. **Free IP tier** — 100 req/day for search + card (no key needed)
-3. **API key** (`X-API-Key`) — 1,000 req/day free
-4. **x402 pay-per-request** — unlimited; if you get `402`, pay via x402 and retry with `X-Payment` header
+See [references/ACCESS.md]({baseDir}/references/ACCESS.md) for full details on tiers, key generation, and x402 payment flow.
+
+**Quick summary:**
+
+| Tier | What you get | Setup |
+|---|---|---|
+| Public | health, stats, top 25 | None |
+| Free IP | + search, card (100/day) | None |
+| API Key | + score, explain (1,000/day) | Wallet signature → `POST /keys/generate` |
+| x402 | + validations, wallet, identity, metadata | On-chain payment per request (Base) |
+
+**No key yet?** Generate one by signing a message with your wallet — see ACCESS.md for the full flow.
+
+**Hit a 402?** The endpoint requires x402 payment. See ACCESS.md for how to handle it, or suggest a free alternative (e.g. `/score/explain` instead of `/validations`).
 
 ## Scoring Reference
 
