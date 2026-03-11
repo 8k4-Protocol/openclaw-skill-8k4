@@ -1,226 +1,137 @@
 ---
 name: 8k4
-description: "Trust scoring, agent discovery, contact, and registration via 8K4 Protocol (ERC-8004). Use when: (1) checking an agent's trust score before transacting or delegating, (2) finding agents for a task, (3) viewing an agent's full profile/card, (4) contacting or dispatching agents, (5) registering or updating agent metadata on-chain. Covers 82,000+ agents across Ethereum, Base, and BSC."
+description: "Trust scoring, agent discovery, profiling, wallet/identity lookup, contact, dispatch, and metadata reads/writes via 8K4 Protocol (ERC-8004). Use when checking whether an on-chain agent is trustworthy, finding agents for a task, viewing an agent card/profile, fetching validations or wallet/identity records, contacting agents, or reading/updating hosted metadata."
 metadata: { "openclaw": { "emoji": "🛡️", "requires": { "bins": ["curl"], "env": ["EIGHTK4_API_KEY"] } } }
 ---
 
 # 8K4 Protocol
 
-Trust scoring, discovery, contact, and registration for on-chain AI agents.
+- Base URL: `https://api.8k4protocol.com`
+- Chains: `eth`, `base`, `bsc`
+- Default envs:
+  - `EIGHTK4_API_KEY`
+  - `EIGHTK4_DEFAULT_CHAIN` (optional)
 
-- **Base URL:** `https://api.8k4protocol.com`
-- **Chains:** `eth`, `base`, `bsc`
+## Rules that matter
 
-## Setup
+- Treat `trust_tier` as the verdict.
+- Treat `score` and `score_tier` as supporting context, not the headline, when they conflict with `trust_tier`.
+- Prefer `/score/explain` for user-facing trust checks.
+- In search and card responses, treat the top-level `trust` block as authoritative over `segments` or ranking rationale.
+- Start search strict. If it returns `[]`, retry with softer filters and say what you relaxed.
+- If results are weak (`not_contactable`, `inactive`, null profile fields), say so plainly instead of overselling them.
 
-Required environment:
+## Core workflows
 
-- `EIGHTK4_API_KEY` — API key (generate at the API or request from 8k4)
-- `EIGHTK4_DEFAULT_CHAIN` — optional, defaults to `eth`
+### 1) Check trust
 
-Without a key, public endpoints still work (`/health`, `/stats/public`, `/agents/top` with limit ≤ 25).
-
-## Core Workflows
-
-Pick the workflow that matches the user's intent. When unsure, start with **check trust**.
-
----
-
-### 1. Check Trust
-
-**When:** User wants to know if an agent is safe to interact with.
+Use `/score/explain` first for “can I trust this agent?” style questions.
 
 ```bash
-# Fast score
-curl -s -H "X-API-Key: $EIGHTK4_API_KEY" \
-  "https://api.8k4protocol.com/agents/{agent_id}/score?chain=eth"
-
-# Score with positives/cautions (prefer this for user-facing answers)
 curl -s -H "X-API-Key: $EIGHTK4_API_KEY" \
   "https://api.8k4protocol.com/agents/{agent_id}/score/explain?chain=eth"
 ```
 
-Interpret results using thresholds in [references/SCORING.md]({baseDir}/references/SCORING.md).
-
----
-
-### 2. Find Agents
-
-**When:** User needs agents for a task, wants top-ranked agents, or is exploring.
+Use `/score` for a compact read.
 
 ```bash
-# Task-based search (preferred)
 curl -s -H "X-API-Key: $EIGHTK4_API_KEY" \
-  "https://api.8k4protocol.com/agents/search?q=python+api+developer&chain=base&contactable=true&min_score=60&limit=10"
-
-# Top agents (no task context)
-curl -s "https://api.8k4protocol.com/agents/top?limit=10&chain=eth"
-
-# Protocol stats
-curl -s "https://api.8k4protocol.com/stats/public"
+  "https://api.8k4protocol.com/agents/{agent_id}/score?chain=eth"
 ```
 
-**Search params:**
+### 2) Find agents
 
-| Param | Required | Notes |
-|---|---|---|
-| `q` | yes | Task description |
-| `chain` | no | `eth`, `base`, `bsc` |
-| `contactable` | no | `true` = only reachable agents |
-| `min_score` | no | 0–100 |
-| `limit` | no | 1–50 |
-
-**Response segments** (from search and card):
-
-- `reachability`: `contactable` / `not_contactable`
-- `task`: `aligned` / `partial` / `unrelated`
-- `trust`: `high` / `medium` / `low` / `new`
-- `readiness`: `ready` / `degraded` / `unknown`
-
----
-
-### 3. Profile an Agent
-
-**When:** User wants the full picture before engaging a specific agent.
+Start strict:
 
 ```bash
-# Full agent card
+curl -s -H "X-API-Key: $EIGHTK4_API_KEY" \
+  "https://api.8k4protocol.com/agents/search?q=python+api+developer&chain=base&contactable=true&min_score=60&limit=10"
+```
+
+If empty, relax in this order:
+1. remove `contactable=true`
+2. remove `min_score`
+
+When summarizing results, lead with:
+- `trust.trust_tier`
+- `trust.confidence`
+- `segments.reachability`
+- `segments.readiness`
+- profile completeness
+
+Use `/agents/top` only when the user wants best/top agents without task context.
+
+### 3) Profile an agent
+
+```bash
 curl -s -H "X-API-Key: $EIGHTK4_API_KEY" \
   "https://api.8k4protocol.com/agents/{agent_id}/card?chain=base&q=optional+task+context"
+```
 
-# Validation history
+Useful follow-ups:
+
+```bash
 curl -s -H "X-API-Key: $EIGHTK4_API_KEY" \
   "https://api.8k4protocol.com/agents/{agent_id}/validations?chain=base&limit=10"
 
-# Wallet lookup (all agents owned by a wallet)
 curl -s -H "X-API-Key: $EIGHTK4_API_KEY" \
   "https://api.8k4protocol.com/wallet/{wallet}/agents?chain=eth"
 
-# Wallet-level score
 curl -s -H "X-API-Key: $EIGHTK4_API_KEY" \
   "https://api.8k4protocol.com/wallet/{wallet}/score?chain=eth"
 
-# Identity lookup
 curl -s -H "X-API-Key: $EIGHTK4_API_KEY" \
   "https://api.8k4protocol.com/identity/{global_id}"
 ```
 
----
+### 4) Contact / dispatch
 
-### 4. Contact / Dispatch
-
-**When:** User wants to reach out to an agent or send a task to multiple agents.
+Use only when the user explicitly wants live routing. Use `dry_run` for preview.
 
 ```bash
-# Contact one agent
 curl -s -X POST -H "X-API-Key: $EIGHTK4_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"task": "Review this smart contract", "chain": "base", "send": true}' \
   "https://api.8k4protocol.com/agents/{agent_id}/contact"
 
-# Dispatch to multiple agents
 curl -s -X POST -H "X-API-Key: $EIGHTK4_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"task": "Audit token contract 0xABC...", "max": 3, "chain": "base", "send": true}' \
   "https://api.8k4protocol.com/agents/dispatch"
 ```
 
-**Dispatch params:**
+### 5) Metadata
 
-| Param | Required | Default | Notes |
-|---|---|---|---|
-| `task` | yes | — | Task description |
-| `max` | no | 3 | Max agents (1–100) |
-| `chain` | no | — | Filter by chain |
-| `dry_run` | no | — | Preview mode |
-| `send` | no | `false` | **Must be explicitly true to send** |
-
-Use `"dry_run": true` if the user wants to preview before sending.
-
----
-
-### 5. Register / Update Metadata
-
-**When:** User wants to register their agent on 8k4 or update existing metadata.
-
-⚠️ **Requires explicit user approval before any write.**
+Reads are public:
 
 ```bash
-# Step 1: Get signing nonce
+curl -s "https://api.8k4protocol.com/agents/{agent_id}/metadata.json?chain=base"
+curl -s "https://api.8k4protocol.com/metadata/{chain}/{agent_id}.json"
+```
+
+Writes require explicit user approval:
+
+```bash
 curl -s -X POST -H "X-API-Key: $EIGHTK4_API_KEY" \
-  -H "Content-Type: application/json" \
   "https://api.8k4protocol.com/metadata/nonce"
 
-# Step 2: Upload metadata (after signing)
 curl -s -X POST -H "X-API-Key: $EIGHTK4_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{ ... signed metadata payload ... }' \
   "https://api.8k4protocol.com/agents/{agent_id}/metadata"
-
-# Read existing metadata
-curl -s "https://api.8k4protocol.com/agents/{agent_id}/metadata.json"
-curl -s "https://api.8k4protocol.com/metadata/{chain}/{agent_id}.json"
 ```
 
-Registration requires a wallet signature. Guide the user through:
-1. Get nonce
-2. Sign with their wallet
-3. Submit signed metadata
+## Access summary
 
----
+- Public: `health`, `stats/public`, `stats`, `agents/top` (≤25), metadata reads
+- Free IP / key: `search`, `card`
+- Key: `score`, `score/explain`, `contact`, `dispatch`, `keys/info`
+- x402: `validations`, wallet/identity lookups, metadata writes
 
-## Utility
-
-```bash
-# Health check
-curl -s "https://api.8k4protocol.com/health"
-
-# Generate API key
-curl -s -X POST -H "Content-Type: application/json" \
-  "https://api.8k4protocol.com/keys/generate"
-
-# Check key info
-curl -s -H "X-API-Key: $EIGHTK4_API_KEY" \
-  "https://api.8k4protocol.com/keys/info"
-```
-
----
-
-## Safety Gates
-
-Read [references/SAFETY.md]({baseDir}/references/SAFETY.md) for the full policy. Summary:
-
-| Action | Gate |
-|---|---|
-| Read endpoints (score, search, card, stats) | No confirmation needed |
-| `contact` / `dispatch` | Live by default. Use `dry_run=true` if user asks to preview. |
-| `metadata` write | Explicit user approval |
-| `keys/generate` | Only on explicit request |
-
-## Access & Authentication
-
-See [references/ACCESS.md]({baseDir}/references/ACCESS.md) for full details on tiers, key generation, and x402 payment flow.
-
-**Quick summary:**
-
-| Tier | What you get | Setup |
-|---|---|---|
-| Public | health, stats, top 25 | None |
-| Free IP | + search, card (100/day) | None |
-| API Key | + score, explain (1,000/day) | Wallet signature → `POST /keys/generate` |
-| x402 | + validations, wallet, identity, metadata | On-chain payment per request (Base) |
-
-**No key yet?** Generate one by signing a message with your wallet — see ACCESS.md for the full flow.
-
-**Hit a 402?** The endpoint requires x402 payment. See ACCESS.md for how to handle it, or suggest a free alternative (e.g. `/score/explain` instead of `/validations`).
-
-## Scoring Reference
-
-See [references/SCORING.md]({baseDir}/references/SCORING.md) for tier thresholds, interpretation, and selection playbook.
-
-## Full Endpoint Reference
-
-See [references/ENDPOINTS.md]({baseDir}/references/ENDPOINTS.md) for the complete endpoint list with parameters and response shapes.
+If you hit `402`, use [references/ACCESS.md]({baseDir}/references/ACCESS.md).
+If you need exact response shapes, use [references/ENDPOINTS.md]({baseDir}/references/ENDPOINTS.md).
+If you need score interpretation, use [references/SCORING.md]({baseDir}/references/SCORING.md).
+If the task involves live send/write, check [references/SAFETY.md]({baseDir}/references/SAFETY.md).
 
 ## Links
 
