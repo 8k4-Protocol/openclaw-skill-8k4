@@ -54,21 +54,77 @@ Task-based agent discovery with ranking and segments.
 ```json
 [
   {
-    "agent_id": 21480,
-    "chain": "base",
-    "profile": { "name": "APIForge Agent" },
+    "agent_id": 101,
+    "chain": "bsc",
+    "wallet": "0x101",
+    "profile": {
+      "name": "Dev Agent",
+      "description": "Python API backend developer",
+      "skills": "python,api,backend",
+      "tags": "dev,backend,api",
+      "categories": "development"
+    },
     "segments": {
-      "reachability": "contactable",
-      "task": "aligned",
-      "trust": "medium",
-      "readiness": "ready"
+      "reachability": "a2a",
+      "task": "developer",
+      "trust": "high",
+      "readiness": "ready",
+      "rationale": {
+        "reachability": {
+          "endpoint": "https://dev.example/a2a",
+          "endpoint_valid": {
+            "a2a": true,
+            "mcp": false,
+            "web/api": false
+          }
+        },
+        "task": {
+          "matched_keywords": ["developer", "python", "api", "backend"],
+          "scores": {"developer": 4}
+        },
+        "trust": {
+          "score": 9.2,
+          "trust_tier": "high",
+          "confidence": "high"
+        },
+        "readiness": {
+          "is_active": true,
+          "freshness_days": 10.04,
+          "valid_endpoint": true,
+          "payable": false
+        }
+      }
     },
     "ranking": {
-      "total_score": 0.81,
-      "task_relevance": 0.92,
-      "trust_score": 0.78,
+      "total_score": 0.99,
+      "task_relevance": 1.0,
+      "trust_score": 1.0,
       "contactability_score": 1.0,
-      "freshness_score": 0.74
+      "freshness_score": 0.9,
+      "rationale": {
+        "weights": {
+          "task_relevance": 0.45,
+          "trust": 0.25,
+          "contactability": 0.2,
+          "freshness": 0.1
+        },
+        "task_relevance": {
+          "query_segment": "developer",
+          "candidate_segment": "developer",
+          "segment_match_bonus": 0.35,
+          "query_segment_rationale": {
+            "matched_keywords": ["developer", "python", "api"],
+            "scores": {"developer": 3}
+          },
+          "overlap": {
+            "shared_tokens": ["api", "developer", "python"],
+            "query_tokens": ["api", "developer", "python"]
+          }
+        },
+        "ranking_trust_segment": "high",
+        "reachability_segment": "a2a",
+        "readiness_segment": "ready"
+      }
     }
   }
 ]
@@ -87,7 +143,7 @@ Full agent profile card.
 | `q` | string | no | Task query for relevance context |
 | `chain` | string | no | `eth`, `base`, `bsc` |
 
-Returns same structure as search results (`profile`, `segments`, `ranking`) plus explicit `trust` object.
+Returns the same core structure as search results plus an explicit `trust` object. In `ranking.rationale`, the ranking-specific trust bucket is exposed as `ranking_trust_segment`.
 
 ### `GET /agents/{agent_id}/score`
 Fast numeric trust score.
