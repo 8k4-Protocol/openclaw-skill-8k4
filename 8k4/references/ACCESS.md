@@ -1,141 +1,108 @@
 # Access & Authentication
 
-## Access Tiers
+## Tiers
 
-8K4 has four access levels. Each tier unlocks more endpoints and higher rate limits.
+### Public
 
-### Tier 1: Public (no auth)
-
-No key, no payment. Available to everyone.
+No key required.
 
 - `GET /health`
 - `GET /stats/public`
-- `GET /agents/top` (limit ≤ 25)
+- `GET /stats`
+- `GET /agents/top` with `limit <= 25`
+- `GET /agents/{id}/metadata.json`
+- `GET /metadata/{chain}/{id}.json`
 
-### Tier 2: Free IP (no key)
+### Free IP / API key
 
-Automatic based on IP. No setup needed.
+- `GET /agents/search`
+- `GET /agents/{id}/card`
 
-- `GET /agents/search` — 100 req/day
-- `GET /agents/{id}/card` — 100 req/day
+Typical public free-IP quota: 100 requests/day.
 
-### Tier 3: API Key
+### API key
 
-Higher rate limits. Requires wallet signature to generate.
+Higher-rate read access plus live routing endpoints.
 
-- All Tier 1 + Tier 2 endpoints
 - `GET /agents/{id}/score`
 - `GET /agents/{id}/score/explain`
-- 1,000 req/day
+- `POST /agents/{id}/contact`
+- `POST /agents/dispatch`
+- `GET /keys/info`
 
-**How to generate a key:**
+## Generate a key
 
-```bash
-POST https://api.8k4protocol.com/keys/generate
-Content-Type: application/json
+The API expects a wallet-signed message in this format:
 
+```text
+Generate 8k4 API key for wallet 0xYOUR_WALLET at timestamp 1735646400
+```
+
+High-level flow:
+1. Build the message with the wallet address and current unix timestamp.
+2. Sign it with the wallet.
+3. POST wallet, signature, and original message to `/keys/generate`.
+
+Example request body:
+
+```json
 {
   "wallet": "0xYOUR_WALLET_ADDRESS",
   "signature": "0xSIGNED_MESSAGE",
-  "message": "Generate 8K4 API key for 0xYOUR_WALLET_ADDRESS"
+  "message": "Generate 8k4 API key for wallet 0xYOUR_WALLET_ADDRESS at timestamp 1735646400"
 }
 ```
 
-Steps:
-1. Construct the message: `"Generate 8K4 API key for 0x..."`
-2. Sign it with your wallet (MetaMask, ethers.js, cast, etc.)
-3. POST with wallet address, signature, and original message
-4. Response contains your API key — store it securely
+## x402 paid endpoints
 
-Example with `cast` (Foundry):
-```bash
-MESSAGE="Generate 8K4 API key for 0xYOUR_WALLET"
-SIG=$(cast wallet sign "$MESSAGE" --private-key $PRIVATE_KEY)
-curl -s -X POST -H "Content-Type: application/json" \
-  -d "{\"wallet\": \"0xYOUR_WALLET\", \"signature\": \"$SIG\", \"message\": \"$MESSAGE\"}" \
-  https://api.8k4protocol.com/keys/generate
-```
-
-**Check key status:**
-```bash
-curl -s -H "X-API-Key: $EIGHTK4_API_KEY" \
-  https://api.8k4protocol.com/keys/info
-```
-
-Use the key via header: `X-API-Key: your_key_here`
-
-### Tier 4: x402 Pay-Per-Request
-
-Unlimited access to all endpoints. Payment settles on Base chain.
-
-Paid endpoints:
+Use x402 for:
 - `GET /agents/{id}/validations`
 - `GET /wallet/{wallet}/agents`
 - `GET /wallet/{wallet}/score`
 - `GET /identity/{global_id}`
-- `GET /agents/{id}/metadata.json`
 - `POST /metadata/nonce`
 - `POST /agents/{id}/metadata`
 
-**How x402 works:**
+## What a raw 402 looks like
 
-x402 is a HTTP-native payment protocol. When you hit a paid endpoint:
+A paid route returns:
+- status `402`
+- JSON body with fields like:
+  - `detail`
+  - `resource`
+  - `accepts`
+  - `hint`
+- a `payment-required` header containing the machine-readable challenge
 
-1. The API returns `402 Payment Required` with payment details in response headers
-2. You make a payment on Base chain to the specified address
-3. You retry the request with `X-Payment` header containing the payment proof
-4. The API verifies payment and returns the data
+Example body:
 
-The payment is per-request and settles on Base. Cost varies by endpoint.
-
-**Handling 402 in practice:**
-
-```bash
-# First request — gets 402 with payment instructions
-RESPONSE=$(curl -s -D /tmp/402_headers \
-  -H "X-API-Key: $EIGHTK4_API_KEY" \
-  "https://api.8k4protocol.com/agents/6888/validations?chain=eth")
-
-# Check headers for payment details
-cat /tmp/402_headers
-# Look for: X-Payment-Address, X-Payment-Amount, X-Payment-Chain
-
-# After paying on-chain, retry with proof
-curl -s -H "X-API-Key: $EIGHTK4_API_KEY" \
-  -H "X-Payment: <payment_proof>" \
-  "https://api.8k4protocol.com/agents/6888/validations?chain=eth"
+```json
+{
+  "detail": "Payment required",
+  "resource": "/wallet/0x.../agents",
+  "accepts": [
+    {
+      "scheme": "exact",
+      "payTo": "0x...",
+      "price": "$0.001",
+      "network": "eip155:8453"
+    }
+  ],
+  "hint": "x402-compatible clients can pay and retry automatically"
+}
 ```
 
-For automated x402 payment, use an x402-compatible client library or middleware.
+## Handling x402
 
-## Endpoint → Tier Map
+Best option: use an x402-compatible client and let it pay/retry automatically.
 
-| Endpoint | Tier | Notes |
-|---|---|---|
-| `/health` | Public | Always free |
-| `/stats/public` | Public | Always free |
-| `/agents/top` (≤25) | Public | Always free |
-| `/agents/search` | Free IP / Key | 100/day (IP) or 1,000/day (key) |
-| `/agents/{id}/card` | Free IP / Key | 100/day (IP) or 1,000/day (key) |
-| `/agents/{id}/score` | Key | Requires API key |
-| `/agents/{id}/score/explain` | Key | Requires API key |
-| `/agents/{id}/validations` | x402 | Paid per request |
-| `/wallet/{w}/agents` | x402 | Paid per request |
-| `/wallet/{w}/score` | x402 | Paid per request |
-| `/identity/{id}` | x402 | Paid per request |
-| `/agents/{id}/metadata.json` | x402 | Paid per request |
-| `/metadata/nonce` | x402 | Paid per request |
-| `/agents/{id}/metadata` (POST) | x402 | Paid per request |
-| `/agents/{id}/contact` | Key | Requires API key |
-| `/agents/dispatch` | Key | Requires API key |
-| `/keys/generate` | Public | Requires wallet signature |
-| `/keys/info` | Key | Requires API key |
+Manual mental model:
+1. request paid endpoint
+2. receive `402`
+3. inspect JSON body or `payment-required` header
+4. pay on Base
+5. retry with payment proof
 
-## When Users Hit Paywalls
-
-If a user gets a 402 or "Payment verification error":
-
-1. Explain which tier the endpoint requires
-2. If they don't have a key: guide them through key generation (wallet signing)
-3. If they need x402: explain the payment flow and cost
-4. Suggest free alternatives when possible (e.g., `/score/explain` instead of `/validations` for trust assessment)
+If a user only wants a trust read, prefer cheaper/free alternatives first when appropriate:
+- `/score/explain` instead of `/validations`
+- `/card` instead of wallet/identity lookups when the target agent is already known
