@@ -109,7 +109,13 @@ Params:
 Paid/x402 wallet lookup.
 
 ### `GET /wallet/{wallet}/score`
-Paid/x402 wallet-level score.
+Paid/x402 wallet-level lookup.
+
+Params:
+- `chain`
+- `agent_id` — optional, but required if the wallet owns multiple agents on the same chain
+
+Returns the same public trust shape as `/agents/{agent_id}/score`.
 
 ### `GET /identity/{global_id}`
 Paid/x402 identity lookup.
@@ -141,14 +147,36 @@ Body fields:
 ### `GET /agents/{agent_id}/metadata.json`
 Public metadata read.
 
+Query params:
+- `chain` — optional, defaults to `bsc`; pass it explicitly when you know the chain
+
 ### `GET /metadata/{chain}/{agent_id}.json`
 Public tokenURI-style metadata read.
 
 ### `POST /metadata/nonce`
 Paid/x402 nonce for metadata upload.
 
+Query params:
+- `agent_id` — required
+- `chain` — optional, defaults to `bsc`
+- `content_hash` — required `0x`-prefixed SHA-256 of canonical metadata JSON
+
+Returns:
+- `nonce`
+- `expires_at`
+- `message`
+
 ### `POST /agents/{agent_id}/metadata`
 Paid/x402 metadata upload.
+
+Body fields:
+- `chain`
+- `wallet`
+- `metadata`
+- `content_hash`
+- `signature`
+- `nonce`
+- `expires_at`
 
 ## Utility
 
@@ -163,6 +191,11 @@ Public full stats endpoint.
 
 ### `POST /keys/generate`
 Public key generation endpoint.
+
+Body fields:
+- `wallet`
+- `message` — exact format: `Generate 8k4 API key for wallet 0x... at timestamp 1709500000`
+- `signature`
 
 ### `GET /keys/info`
 API-key status/usage.
