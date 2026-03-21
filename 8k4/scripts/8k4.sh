@@ -12,29 +12,29 @@ usage() {
 Usage: 8k4.sh <command> [options]
 
 Commands:
-  health                          Health check
-  stats                           Protocol stats (public)
-  top [--limit N] [--chain C]     Top agents
-  score <id> [--chain C]          Trust score
-  explain <id> [--chain C]        Trust score with explanation
-  validations <id> [--chain C]    Validation history
+  health                                  Health check
+  stats                                   Protocol stats (public)
+  top [--limit N] [--chain C]             Top agents
+  score <id> [--chain C]                  Trust score
+  explain <id> [--chain C]                Trust score with explanation
+  validations <id> [--chain C] [--limit N]
+                                          Validation history (paid/x402)
   search <query> [--chain C] [--contactable] [--min-score N] [--limit N]
   card <id> [--chain C] [--query Q]
-  wallet-agents <addr> [--chain C]
-  wallet-score <addr> [--chain C]
-  identity <global_id>
+  wallet-agents <addr> [--chain C]        Wallet lookup (paid/x402)
+  wallet-score <addr> [--chain C]         Wallet-level score (paid/x402)
+  identity <global_id>                    Identity lookup (paid/x402)
   contact <id> --task "..." [--chain C] [--dry-run]
   dispatch --task "..." [--max N] [--chain C] [--dry-run]
-  metadata <id> [--chain C]       Read metadata
-  key-info                        Current key info
-  key-generate                    Generate new key
+  metadata <id> [--chain C]               Read metadata envelope
+  key-info                                Current key info
 
 Options:
   --chain C       Chain: eth, base, bsc (default: $DEFAULT_CHAIN)
   --dry-run       Preview only (contact/dispatch; default: live send)
 
 Environment:
-  EIGHTK4_API_KEY        API key (falls back to ORLUR_API_KEY)
+  EIGHTK4_API_KEY        API key
   EIGHTK4_DEFAULT_CHAIN  Default chain (default: eth)
 EOF
   exit 1
@@ -124,7 +124,7 @@ case "$CMD" in
     ;;
 
   validations)
-    [[ $# -lt 1 ]] && { echo "Usage: 8k4.sh validations <agent_id> [--chain C]"; exit 1; }
+    [[ $# -lt 1 ]] && { echo "Usage: 8k4.sh validations <agent_id> [--chain C] [--limit N]"; exit 1; }
     ID="$1"; shift
     parse_flags "$@"
     params="chain=${CHAIN}"
@@ -172,7 +172,7 @@ case "$CMD" in
     ;;
 
   contact)
-    [[ $# -lt 1 ]] && { echo "Usage: 8k4.sh contact <agent_id> --task '...' [--chain C] [--send]"; exit 1; }
+    [[ $# -lt 1 ]] && { echo "Usage: 8k4.sh contact <agent_id> --task '...' [--chain C] [--dry-run]"; exit 1; }
     ID="$1"; shift
     parse_flags "$@"
     [[ -z "$TASK" ]] && { echo "Error: --task is required"; exit 1; }
@@ -200,15 +200,11 @@ JSON
     [[ $# -lt 1 ]] && { echo "Usage: 8k4.sh metadata <agent_id> [--chain C]"; exit 1; }
     ID="$1"; shift
     parse_flags "$@"
-    api_get "/agents/${ID}/metadata.json"
+    api_get "/agents/${ID}/metadata.json?chain=${CHAIN}"
     ;;
 
   key-info)
     api_get "/keys/info"
-    ;;
-
-  key-generate)
-    api_post "/keys/generate"
     ;;
 
   *)

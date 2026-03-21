@@ -20,6 +20,7 @@ metadata: { "openclaw": { "emoji": "🛡️", "requires": { "bins": ["curl"], "e
 - In search and card responses, treat the top-level `trust` block as authoritative over `segments` or ranking rationale.
 - Start search strict. If it returns `[]`, retry with softer filters and say what you relaxed.
 - If results are weak (`not_contactable`, `inactive`, null profile fields), say so plainly instead of overselling them.
+- Do not auto-pay x402 endpoints without user confirmation.
 
 ## Core workflows
 
@@ -112,18 +113,22 @@ curl -s "https://api.8k4protocol.com/metadata/{chain}/{agent_id}.json"
 Writes require explicit user approval:
 
 ```bash
-curl -s -X POST -H "X-API-Key: $EIGHTK4_API_KEY" \
-  "https://api.8k4protocol.com/metadata/nonce"
+# 1) Compute canonical metadata JSON and its 0x-prefixed SHA-256 content hash
 
+# 2) Request a nonce + message to sign
+curl -s -X POST -H "X-API-Key: $EIGHTK4_API_KEY" \
+  "https://api.8k4protocol.com/metadata/nonce?agent_id={agent_id}&chain=base&content_hash=0x..."
+
+# 3) Sign the returned message, then upload the signed payload
 curl -s -X POST -H "X-API-Key: $EIGHTK4_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{ ... signed metadata payload ... }' \
+  -d '{"chain":"base","wallet":"0x...","metadata":{...},"content_hash":"0x...","signature":"0x...","nonce":"...","expires_at":1709506200}' \
   "https://api.8k4protocol.com/agents/{agent_id}/metadata"
 ```
 
 ## Access summary
 
-- Public: `health`, `stats/public`, `stats`, `agents/top` (≤25), metadata reads
+- Public: `health`, `stats`, `stats/public`, `agents/top` (≤25), metadata reads
 - Free IP / key: `search`, `card`
 - Key: `score`, `score/explain`, `contact`, `dispatch`, `keys/info`
 - x402: `validations`, wallet/identity lookups, metadata writes
@@ -131,7 +136,7 @@ curl -s -X POST -H "X-API-Key: $EIGHTK4_API_KEY" \
 If you hit `402`, use [references/ACCESS.md]({baseDir}/references/ACCESS.md).
 If you need exact response shapes, use [references/ENDPOINTS.md]({baseDir}/references/ENDPOINTS.md).
 If you need score interpretation, use [references/SCORING.md]({baseDir}/references/SCORING.md).
-If the task involves live send/write, check [references/SAFETY.md]({baseDir}/references/SAFETY.md).
+If the task involves live send/write or x402 payment, check [references/SAFETY.md]({baseDir}/references/SAFETY.md).
 
 ## Links
 

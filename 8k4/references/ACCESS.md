@@ -10,8 +10,9 @@ No key required.
 - `GET /stats/public`
 - `GET /stats`
 - `GET /agents/top` with `limit <= 25`
-- `GET /agents/{id}/metadata.json`
+- `GET /agents/{id}/metadata.json?chain=...`
 - `GET /metadata/{chain}/{id}.json`
+- `POST /keys/generate`
 
 ### Free IP / API key
 
@@ -32,16 +33,17 @@ Higher-rate read access plus live routing endpoints.
 
 ## Generate a key
 
-The API expects a wallet-signed message in this format:
+The API expects a wallet-signed message in this exact format:
 
 ```text
 Generate 8k4 API key for wallet 0xYOUR_WALLET at timestamp 1735646400
 ```
 
-High-level flow:
+Rules:
 1. Build the message with the wallet address and current unix timestamp.
 2. Sign it with the wallet.
 3. POST wallet, signature, and original message to `/keys/generate`.
+4. The timestamp must be within 5 minutes of current UTC time.
 
 Example request body:
 
@@ -60,7 +62,7 @@ Use x402 for:
 - `GET /wallet/{wallet}/agents`
 - `GET /wallet/{wallet}/score`
 - `GET /identity/{global_id}`
-- `POST /metadata/nonce`
+- `POST /metadata/nonce?agent_id=...&chain=...&content_hash=0x...`
 - `POST /agents/{id}/metadata`
 
 ## What a raw 402 looks like
@@ -106,3 +108,9 @@ Manual mental model:
 If a user only wants a trust read, prefer cheaper/free alternatives first when appropriate:
 - `/score/explain` instead of `/validations`
 - `/card` instead of wallet/identity lookups when the target agent is already known
+
+For metadata upload:
+1. compute canonical metadata JSON and a `0x`-prefixed SHA-256 content hash
+2. request `/metadata/nonce` with `agent_id`, `chain`, and `content_hash`
+3. sign the returned `message`
+4. submit the signed payload to `/agents/{id}/metadata`
